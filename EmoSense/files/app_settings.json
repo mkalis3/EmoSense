@@ -1,0 +1,9 @@
+{
+    "weights": {
+        "cnn": 0.1782178217821782,
+        "logic": 0.4554455445544555,
+        "text": 0.36633663366336633
+    },
+    "audio_source": "Internal Audio (System Output)",
+    "internal_device_name": "3: Stereo Mix (Realtek High Defini (MME)"
+}
