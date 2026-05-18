@@ -10,10 +10,13 @@ from tkinter import ttk, messagebox
 from queue import Empty
 import threading
 import time
+import logging
 
 import config
 from utils import save_settings, load_settings
 import report_generator
+
+logger = logging.getLogger(__name__)
 
 
 def show_loading_screen(root_window, loading_complete_event):
@@ -71,7 +74,7 @@ def populate_internal_audio_devices(cb, sd):
     try:
         devices = sd.query_devices()
     except Exception as e:
-        print(f"Could not query audio devices: {e}")
+        logger.warning("Could not query audio devices: %s", e)
         devices = []
     cb['values'] = [f"{i}: {d.get('name', 'Unk')} ({sd.query_hostapis(d['hostapi']).get('name', 'N/A')})"
                     for i, d in enumerate(devices) if d.get('max_input_channels', 0) > 0]

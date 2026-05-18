@@ -5,16 +5,20 @@ Provides online speaker identification using cosine similarity on voice
 embeddings, GUI slot mapping, and optional acoustic feature extraction.
 """
 
-import numpy as np
 import time
+import logging
+
+import numpy as np
 import config
+
+logger = logging.getLogger(__name__)
 
 try:
     from scipy.spatial.distance import cdist
 
     HAS_SCIPY = True
 except ImportError:
-    print("WARNING: scipy not installed - using basic distance calculation")
+    logger.warning("scipy is not installed; using basic distance calculation")
     HAS_SCIPY = False
 
 
@@ -33,7 +37,7 @@ try:
 
     HAS_SKLEARN = True
 except ImportError:
-    print("WARNING: sklearn not installed - GMM features disabled")
+    logger.warning("sklearn is not installed; GMM features are disabled")
     HAS_SKLEARN = False
     GaussianMixture = None
 
@@ -43,7 +47,7 @@ try:
 
     HAS_LIBROSA = True
 except ImportError:
-    print("WARNING: Enhanced acoustic features disabled")
+    logger.warning("librosa is not installed; enhanced acoustic features are disabled")
     HAS_LIBROSA = False
 
 
@@ -166,8 +170,3 @@ EnhancedOnlineDia = OnlineDia
 
 dia = None
 gui_speaker_mapper = None
-
-print("Diarization module loaded")
-print(f"- scipy available: {HAS_SCIPY}")
-print(f"- sklearn available: {HAS_SKLEARN}")
-print(f"- librosa features: {HAS_LIBROSA}")

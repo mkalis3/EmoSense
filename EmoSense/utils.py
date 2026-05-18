@@ -3,7 +3,10 @@
 import os
 import re
 import json
+import logging
 import config
+
+logger = logging.getLogger(__name__)
 
 
 def save_settings(settings_to_save: dict) -> None:
@@ -16,7 +19,7 @@ def save_settings(settings_to_save: dict) -> None:
         with open(config.SETTINGS_FILE, 'w') as f:
             json.dump(settings_to_save, f, indent=4)
     except Exception as e:
-        print(f"Failed to save settings: {e}", flush=True)
+        logger.warning("Failed to save settings: %s", e)
 
 
 def load_settings() -> dict:
@@ -42,9 +45,9 @@ def load_settings() -> dict:
 
                 return settings
         except (json.JSONDecodeError, IOError) as e:
-            print(f"Failed to load settings file: {e}", flush=True)
+            logger.warning("Failed to load settings file: %s", e)
 
-    print("Settings file not found or corrupt. Loading default settings.", flush=True)
+    logger.info("Settings file not found or corrupt; loading default settings")
     return {
         'weights': config.INITIAL_EMOTION_WEIGHTS.copy(),
         'audio_source': config.AUDIO_SOURCE_EXTERNAL,

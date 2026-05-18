@@ -6,8 +6,11 @@ sample transcripts, and distress detection status.
 """
 
 import os
+import logging
 from datetime import datetime
 import config
+
+logger = logging.getLogger(__name__)
 
 
 def generate_summary_report():
@@ -96,6 +99,6 @@ def generate_summary_report():
 
         return filename
 
-    except Exception as e:
-        print(f"Error generating report: {e}")
+    except Exception:
+        logger.exception("Failed to generate summary report")
         return None

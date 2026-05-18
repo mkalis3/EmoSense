@@ -7,6 +7,9 @@ import threading
 import tkinter as tk
 from tkinter import messagebox
 import time
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def heavy_initialization_task(progress_queue, loading_complete_event):
@@ -29,21 +32,21 @@ def heavy_initialization_task(progress_queue, loading_complete_event):
         if os.path.exists(config.CNN_PATH):
             config.cnn_model = tf.keras.models.load_model(config.CNN_PATH, compile=False)
             if config.cnn_model is not None:
-                print("[Init] CNN model loaded successfully.")
+                logger.info("CNN model loaded successfully")
             else:
-                print("[Init] ERROR: CNN model failed to load.")
+                logger.error("CNN model failed to load")
 
             if os.path.exists(config.LABEL_PATH):
                 config.cnn_lblenc = LabelEncoder()
                 config.cnn_lblenc.classes_ = np.load(config.LABEL_PATH, allow_pickle=True)
-                print("[Init] Label encoder loaded.")
+                logger.info("Label encoder loaded")
         else:
-            print(f"[Init] ERROR: CNN model file not found at {config.CNN_PATH}")
+            logger.error("CNN model file not found at %s", config.CNN_PATH)
 
         progress_queue.put((20, "CNN model loaded"))
 
         config.speaker_encoder = VoiceEncoder()
-        print("[Init] Voice encoder loaded.")
+        logger.info("Voice encoder loaded")
         progress_queue.put((35, "Voice encoder loaded"))
 
         if config.PYTORCH_AVAILABLE:
@@ -54,15 +57,15 @@ def heavy_initialization_task(progress_queue, loading_complete_event):
                     repo_or_dir='snakers4/silero-vad', model='silero_vad', trust_repo=True, onnx=True
                 )
                 config.get_speech_timestamps = utils[0]
-                print("[Init] VAD model loaded.")
+                logger.info("VAD model loaded")
             except Exception as e:
-                print(f"[Init] VAD Loading Failed: {e}")
+                logger.warning("VAD loading failed: %s", e)
         progress_queue.put((50, "VAD loaded"))
 
         config.text_emotion_pipeline = pipeline(
             "text-classification", model="cardiffnlp/twitter-roberta-base-emotion", top_k=None
         )
-        print("[Init] Text analysis pipeline loaded.")
+        logger.info("Text analysis pipeline loaded")
         progress_queue.put((65, "Text analysis loaded"))
 
         try:
@@ -71,15 +74,15 @@ def heavy_initialization_task(progress_queue, loading_complete_event):
                 model="avichr/heBERT_sentiment_analysis",
                 device=-1
             )
-            print("[Init] Hebrew sentiment model loaded successfully.")
+            logger.info("Hebrew sentiment model loaded successfully")
         except Exception as e:
-            print(f"[Init] Hebrew model loading failed (optional): {e}")
+            logger.warning("Hebrew model loading failed: %s", e)
             config.hebrew_sentiment_pipeline = None
         progress_queue.put((80, "Language models loaded"))
 
         diarization.dia = diarization.OnlineDia()
         config.gui_speaker_mapper = diarization.GuiSpeakerMapper()
-        print("[Init] Diarization module initialized.")
+        logger.info("Diarization module initialized")
         progress_queue.put((90, "Diarization initialized"))
 
         elapsed = time.time() - start_time
@@ -92,9 +95,7 @@ def heavy_initialization_task(progress_queue, loading_complete_event):
     except Exception as e:
         error_msg = f"Critical loading error: {str(e)}"
         progress_queue.put((98, error_msg))
-        print(f"FATAL ERROR DURING INITIALIZATION: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Fatal error during initialization")
     finally:
         loading_complete_event.set()
 

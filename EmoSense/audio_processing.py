@@ -8,7 +8,7 @@ via Google STT, speaker diarization, and emotion analysis dispatching.
 import io
 import gc
 import time
-import traceback
+import logging
 
 import numpy as np
 import sounddevice as sd
@@ -26,6 +26,8 @@ from config import (
     SILERO_VAD_THRESHOLD, MAX_SPEECH_SEGMENT_DURATION_S, MAX_GUI_SPK,
     emotion_executor, emotion_futures, PYTORCH_AVAILABLE, ENERGY_THRESHOLD
 )
+
+logger = logging.getLogger(__name__)
 
 
 def process_google_stt_task(audio_data_16k_np, google_recognizer_instance):
@@ -69,7 +71,7 @@ def cleanup_old_data():
             if old_segment['id'] in segment_id_map: del segment_id_map[old_segment['id']]
         gc.collect()
     except Exception as e:
-        print(f"[Cleanup Error] {e}")
+        logger.warning("Failed to clean old audio segments: %s", e)
 
 
 def audio_loop(stt_recognizer, log_widget):
@@ -107,7 +109,7 @@ def audio_loop(stt_recognizer, log_widget):
                                                          chunk_ids, current_weights, is_internal_audio, dom_sid)
                     emotion_futures.append(emo_future)
                 except Exception as e:
-                    print(f"Error processing STT future: {e}", flush=True)
+                    logger.exception("Failed to process speech-to-text result")
 
             completed_emo_indices = [i for i, f in enumerate(emotion_futures) if f.done()]
             for i in sorted(completed_emo_indices, reverse=True):
@@ -116,30 +118,18 @@ def audio_loop(stt_recognizer, log_widget):
                     if result := future.result():
                         emo, details, conf, chunk_ids = result
 
-                        if chunk_ids and chunk_ids[0] % 10 == 0:
-                            print(f"[AUDIO DEBUG] Storing emotion details for segments {chunk_ids}: {emo} ({conf:.0%})")
-
                         for seg_id in chunk_ids:
                             if seg_id in segment_id_map:
                                 segment_id_map[seg_id]['emotion_state'] = emo
                                 segment_id_map[seg_id]['emotion_confidence'] = conf
                                 segment_id_map[seg_id]['emotion_details'] = details
 
-                                if seg_id % 10 == 0:
-                                    stored_details = segment_id_map[seg_id].get('emotion_details', {})
-                                    print(f"[AUDIO DEBUG] Verified storage for segment {seg_id}:")
-                                    print(f"  - Has CNN: {'cnn_analysis' in stored_details}")
-                                    print(f"  - Has Logic: {'logic_analysis' in stored_details}")
-                                    print(f"  - Has Text: {'text_analysis' in stored_details}")
-                                    print(f"  - Has Final: {'final_decision' in stored_details}")
-
                         if chunk_ids and 0 <= (dom_sid := segment_id_map[chunk_ids[0]].get("sid", -1)) < MAX_GUI_SPK:
                             if emo not in ["neutral", "silent"] or conf > 0.6:
                                 _last_significant_emotion_cache_spk[dom_sid] = {'emotion': emo, 'time': time.time(),
                                                                                 'confidence': conf}
                 except Exception as e:
-                    print(f"Error processing emotion future: {e}", flush=True)
-                    traceback.print_exc()
+                    logger.exception("Failed to process emotion analysis result")
 
             block_size = int(CHUNK_SEC * PEAK_SR)
             if config.current_audio_device_index != config.audio_loop_last_dev_idx_val or not \
@@ -172,7 +162,7 @@ def audio_loop(stt_recognizer, log_widget):
                                                                      threshold=SILERO_VAD_THRESHOLD)
                     if speech_timestamps: has_speech = True
                 except Exception as e:
-                    print(f"[VAD ERROR] {e}, falling back to energy.", flush=True)
+                    logger.warning("VAD failed; falling back to energy detection: %s", e)
                     has_speech = np.sqrt(np.mean(y_data ** 2)) > ENERGY_THRESHOLD
             else:
                 has_speech = np.sqrt(np.mean(y_data ** 2)) > ENERGY_THRESHOLD
@@ -189,7 +179,7 @@ def audio_loop(stt_recognizer, log_widget):
                         int_sid = diarization.dia.add(emb)
                         current_utterance_speaker_id = config.gui_speaker_mapper.get_gui_sid(int_sid, emb)
                     except Exception as e:
-                        print(f"Diarization error: {e}", flush=True);
+                        logger.warning("Diarization failed; using default speaker: %s", e)
                         current_utterance_speaker_id = 0
 
                 speech_accumulator_16k.append(librosa.resample(y_data, orig_sr=PEAK_SR, target_sr=16000))
@@ -225,13 +215,12 @@ def audio_loop(stt_recognizer, log_widget):
             time.sleep(0.005)
 
         except sd.PortAudioError as pa_err:
-            print(f"PortAudioError, resetting stream: {pa_err}", flush=True)
+            logger.warning("PortAudio error; resetting stream: %s", pa_err)
             if config.audio_loop_stream_obj_ref[0]: config.audio_loop_stream_obj_ref[0].close()
             config.audio_loop_stream_obj_ref[0] = None;
             time.sleep(1)
         except Exception as e:
-            print(f"AudioLoop Critical Error: {e}", flush=True);
-            traceback.print_exc()
+            logger.exception("Audio loop failed")
             if config.audio_loop_stream_obj_ref[0]: config.audio_loop_stream_obj_ref[0].close()
             config.audio_loop_stream_obj_ref[0] = None;
             time.sleep(1)

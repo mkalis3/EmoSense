@@ -65,7 +65,7 @@ EmoSense captures live audio, identifies speakers using voice embeddings, transc
 ### Setup
 
 ```bash
-git clone https://github.com/yourusername/EmoSense.git
+git clone https://github.com/mkalis3/EmoSense.git
 cd EmoSense
 
 python -m venv venv
