@@ -1,5 +1,8 @@
+import logging
 import os
 import time
+from pathlib import Path
+
 import numpy as np
 import librosa
 import tensorflow as tf
@@ -10,17 +13,21 @@ from tkinter import messagebox
 import threading
 
 layers, models, utils, callbacks = tf.keras.layers, tf.keras.models, tf.keras.utils, tf.keras.callbacks
+logger = logging.getLogger(__name__)
 
-CREMA_MODEL_PATH = "files/emotion_cnn_model_crema.keras"
-TESS_MODEL_PATH = "files/emotion_cnn_model_tess.keras"
-CREAMTESSRAVDESS_PATH = "files/CREAMTESSRAVDESS.keras"
+PROJECT_DIR = Path(__file__).resolve().parent
+MODEL_DIR = PROJECT_DIR / "files"
 
-LABEL_ENCODER_PATH = "files/label_encoder.npy"
-LABEL_ENCODER_RAVDESS_PATH = "files/label_encoder_ravdess.npy"
+CREMA_MODEL_PATH = MODEL_DIR / "emotion_cnn_model_crema.keras"
+TESS_MODEL_PATH = MODEL_DIR / "emotion_cnn_model_tess.keras"
+CREAMTESSRAVDESS_PATH = MODEL_DIR / "CREAMTESSRAVDESS.keras"
 
-TESS_PATH = r"D:\FinalDataset\TESS"
-CREMA_PATH = r"D:\FinalDataset\Crema"
-RAVDESS_PATH = r"D:\FinalDataset\RAVDESS"
+LABEL_ENCODER_PATH = MODEL_DIR / "label_encoder.npy"
+LABEL_ENCODER_RAVDESS_PATH = MODEL_DIR / "label_encoder_ravdess.npy"
+
+TESS_PATH = Path(os.getenv("EMOSENSE_TESS_PATH", "datasets/TESS"))
+CREMA_PATH = Path(os.getenv("EMOSENSE_CREMA_PATH", "datasets/CREMA-D"))
+RAVDESS_PATH = Path(os.getenv("EMOSENSE_RAVDESS_PATH", "datasets/RAVDESS"))
 
 model_crema = None
 model_tess = None
@@ -38,6 +45,7 @@ class SlowTrainingCallback(callbacks.Callback):
 
 
 def save_label_encoder(encoder, path):
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
     np.save(path, encoder.classes_)
 
 
@@ -53,7 +61,7 @@ def extract_mfcc(file_path):
         mfccs = librosa.feature.mfcc(y=audio, sr=sample_rate, n_mfcc=40)
         return np.mean(mfccs.T, axis=0)
     except Exception as e:
-        print(f"Error extracting MFCC from {file_path}: {e}")
+        logger.warning("Failed to extract MFCC from %s: %s", file_path, e)
         return None
 
 
@@ -67,6 +75,10 @@ def replicate_data(X, y, factor=3):
 
 def prepare_tess_data():
     mfcc_features, labels = [], []
+    if not TESS_PATH.exists():
+        logger.warning("TESS dataset was not found at %s", TESS_PATH)
+        return np.array(mfcc_features), np.array(labels)
+
     for root, _, files in os.walk(TESS_PATH):
         for file in files:
             if file.endswith('.wav'):
@@ -80,9 +92,48 @@ def prepare_tess_data():
     return np.array(mfcc_features), np.array(labels)
 
 
+def emotion_from_crema_filename(file_name):
+    emotion_map = {
+        "ANG": "angry",
+        "HAP": "happy",
+        "SAD": "sad",
+    }
+    parts = Path(file_name).stem.split("_")
+    if len(parts) < 3:
+        return None
+    return emotion_map.get(parts[2].upper())
+
+
+def prepare_crema_data():
+    mfcc_features, labels = [], []
+    if not CREMA_PATH.exists():
+        logger.warning("CREMA dataset was not found at %s", CREMA_PATH)
+        return np.array(mfcc_features), np.array(labels)
+
+    for root, _, files in os.walk(CREMA_PATH):
+        for file in files:
+            if not file.lower().endswith(".wav"):
+                continue
+
+            emotion = emotion_from_crema_filename(file)
+            if emotion is None:
+                continue
+
+            mfcc = extract_mfcc(os.path.join(root, file))
+            if mfcc is not None:
+                mfcc_features.append(mfcc)
+                labels.append(emotion)
+
+    return np.array(mfcc_features), np.array(labels)
+
+
 def prepare_ravdess_data():
     mfcc_features = []
     labels = []
+    if not RAVDESS_PATH.exists():
+        logger.warning("RAVDESS dataset was not found at %s", RAVDESS_PATH)
+        return np.array(mfcc_features), np.array(labels)
+
     for actor_dir in os.listdir(RAVDESS_PATH):
         full_actor_path = os.path.join(RAVDESS_PATH, actor_dir)
         if not os.path.isdir(full_actor_path):
@@ -113,17 +164,6 @@ def prepare_ravdess_data():
                     mfcc_features.append(mfcc)
                     labels.append(emotion)
     return np.array(mfcc_features), np.array(labels)
-
-
-def prepare_crema_data_mock():
-    N = 5000
-    X = np.random.rand(N, 40)
-    y_indices = np.random.randint(0, 3, N)
-    y_cat = utils.to_categorical(y_indices, num_classes=3)
-    split_idx = int(0.8 * len(X))
-    X_train, X_test = X[:split_idx], X[split_idx:]
-    y_train, y_test = y_cat[:split_idx], y_cat[split_idx:]
-    return X_train, X_test, y_train, y_test
 
 
 def build_cnn_model_for_crema(input_shape, num_classes):
@@ -175,13 +215,22 @@ def build_cnn_model_for_ravdess(input_shape, num_classes):
 
 def train_crema_model():
     global model_crema, label_encoder
-    messagebox.showinfo("Training", "Training on CREMA started (5,000 samples)!")
+    messagebox.showinfo("Training", "Training on CREMA started.")
 
-    X_train, X_test, y_train, y_test = prepare_crema_data_mock()
+    X, y = prepare_crema_data()
+    if len(X) == 0:
+        messagebox.showwarning("Warning", f"CREMA dataset is empty or not found at {CREMA_PATH}.")
+        return
 
     label_encoder = LabelEncoder()
     label_encoder.fit(['angry', 'happy', 'sad'])
     save_label_encoder(label_encoder, LABEL_ENCODER_PATH)
+
+    y_encoded = label_encoder.transform(y)
+    y_categorical = utils.to_categorical(y_encoded)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y_categorical, test_size=0.2, random_state=42, stratify=y_encoded
+    )
 
     model_crema = build_cnn_model_for_crema(X_train.shape[1], y_train.shape[1])
 
@@ -284,7 +333,7 @@ def train_ravdess_model():
     model_ravdess.save(CREAMTESSRAVDESS_PATH)
 
     test_loss, test_acc = model_ravdess.evaluate(X_test, y_test, verbose=0)
-    print(f"\nFinal test accuracy on RAVDESS: {test_acc:.3f}, test loss: {test_loss:.3f}")
+    logger.info("Final test accuracy on RAVDESS: %.3f, test loss: %.3f", test_acc, test_loss)
 
     from sklearn.metrics import classification_report, confusion_matrix
 
@@ -293,11 +342,9 @@ def train_ravdess_model():
     y_true_classes = y_test.argmax(axis=1)
 
     target_names = label_encoder_ravdess.classes_
-    print("\nClassification Report (RAVDESS):")
-    print(classification_report(y_true_classes, y_pred_classes, target_names=target_names))
-
-    print("Confusion Matrix (RAVDESS):")
-    print(confusion_matrix(y_true_classes, y_pred_classes))
+    logger.info("Classification Report (RAVDESS):\n%s",
+                classification_report(y_true_classes, y_pred_classes, target_names=target_names))
+    logger.info("Confusion Matrix (RAVDESS):\n%s", confusion_matrix(y_true_classes, y_pred_classes))
 
     messagebox.showinfo("Success", "Extended Training on RAVDESS completed and model saved as CREAMTESSRAVDESS!")
 

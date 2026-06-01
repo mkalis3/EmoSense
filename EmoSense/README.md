@@ -85,7 +85,11 @@ To retrain the CNN model on CREMA-D, TESS, or RAVDESS datasets:
 python training_main.py
 ```
 
-Update the dataset paths in `training_main.py` to match your local setup.
+Set dataset locations with environment variables when the datasets are outside the default `datasets/` directory:
+
+```bash
+EMOSENSE_CREMA_PATH=/path/to/CREMA-D python training_main.py
+```
 
 ## Usage
 
@@ -111,31 +115,42 @@ All tunable parameters are centralized in `config.py`:
 ## Testing
 
 ```bash
-pip install pytest
-pytest tests/ -v
+cd ..
+pip install -r requirements-dev.txt
+python -m compileall EmoSense
+python scripts/check_project.py
+python -m pytest EmoSense/tests -q
 ```
 
 ## Project Structure
 
 ```
 EmoSense/
-├── main.py                 # Application entry point
-├── config.py               # Centralized configuration
-├── analysis.py             # Emotion analysis pipeline (CNN, Logic, Text, Fusion)
-├── audio_processing.py     # Audio capture, VAD, STT, processing loop
-├── diarization.py          # Speaker identification and tracking
-├── gui.py                  # Tkinter GUI with matplotlib waveform display
-├── report_generator.py     # Session report export
-├── training_main.py        # CNN model training scripts
-├── utils.py                # Utility functions
-├── verify_setup.py         # Dependency verification
+├── main.py
+├── config.py
+├── analysis.py
+├── analysis_components/
+│   ├── acoustic.py
+│   ├── audio_features.py
+│   ├── cnn.py
+│   ├── pipeline.py
+│   ├── risk.py
+│   ├── smoothing.py
+│   └── text_emotion.py
+├── audio_processing.py
+├── diarization.py
+├── gui.py
+├── report_generator.py
+├── training_main.py
+├── utils.py
+├── verify_setup.py
 ├── tests/
-│   ├── test_analysis.py    # Emotion analysis unit tests
-│   ├── test_config.py      # Configuration validation tests
-│   ├── test_diarization.py # Diarization unit tests
+│   ├── test_analysis.py
+│   ├── test_config.py
+│   ├── test_diarization.py
 │   ├── test_report_generator.py
-│   └── test_utils.py       # Utility function tests
-├── files/                  # Pre-trained models and settings
+│   └── test_utils.py
+├── files/
 │   ├── emotion_cnn_plus.keras
 │   ├── label_encoder.npy
 │   └── app_settings.json

@@ -43,7 +43,6 @@ except ImportError:
 
 try:
     import librosa
-    _ = librosa  # verify availability
 
     HAS_LIBROSA = True
 except ImportError:
@@ -72,8 +71,6 @@ class OnlineDia:
         """Assign a speaker ID to an embedding, creating new speakers as needed."""
         if embedding is None:
             embedding = emb_or_audio
-        else:
-            _ = emb_or_audio  # audio_chunk reserved for future use
 
         current_threshold = 0.9
 

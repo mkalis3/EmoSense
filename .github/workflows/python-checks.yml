@@ -25,6 +25,8 @@ jobs:
       - name: Compile source
         run: python -m compileall EmoSense
 
+      - name: Run project quality checks
+        run: python scripts/check_project.py
+
       - name: Run unit tests
         run: python -m pytest EmoSense/tests -q
-

@@ -22,6 +22,7 @@ The application records live audio, groups speech by speaker, transcribes uttera
 ```text
 EmoSense/
 ├── EmoSense/
+│   ├── analysis_components/
 │   ├── analysis.py
 │   ├── audio_processing.py
 │   ├── config.py
@@ -33,11 +34,15 @@ EmoSense/
 │   ├── utils.py
 │   ├── files/
 │   └── tests/
+├── docs/
+├── scripts/
 ├── requirements-dev.txt
 └── README.md
 ```
 
 ## Setup
+
+Requires Python 3.9 or newer and a working microphone.
 
 ```bash
 git clone https://github.com/mkalis3/EmoSense.git
@@ -60,10 +65,17 @@ From the repository root:
 ```bash
 pip install -r requirements-dev.txt
 python -m compileall EmoSense
+python scripts/check_project.py
 python -m pytest EmoSense/tests -q
 ```
+
+The CI workflow runs the same checks on every push and pull request.
+
+## Documentation
+
+- [Architecture](docs/ARCHITECTURE.md)
+- [QA Notes](docs/QA.md)
 
 ## Notes
 
 The trained model files are included for reproducible local runs. For a production deployment, these files should be moved to a release artifact or model registry and loaded during setup.
-
